@@ -9,7 +9,7 @@ public class GasStationSimulation extends Process {
     Head dieselPumps = new Head();
     Head waitingGasolineCars = new Head();
     Head waitingDieselCars = new Head();
-    Random random = new Random(5);
+    Random random = new Random(10);
     double totalServiceTime;
     int noOfServedCars, maxQueueLength,noOfCarsLeft, currentCarsOnStation,noOfGasolineCars,noOfDieselCars = 0;
     int maxCapacity = 5; //celková maximální kapacita aut na stanici
@@ -21,16 +21,16 @@ public class GasStationSimulation extends Process {
     }
     public void actions() {
         for (int i = 0; i < noOfGasolinePumps; i++)
-            new FuelPump("gasoline").into(gasolinePumps);
+            new FuelPump(FuelType.GASOLINE).into(gasolinePumps);
         for (int i = 0; i < noOfDieselPumps; i++)
-            new FuelPump("diesel").into(dieselPumps);
+            new FuelPump(FuelType.DIESEL).into(dieselPumps);
         activate(new CarGenerator());
         hold(simPeriod + 1000000);
         report();
     }
 
     void report() {
-        //System.out.println(noOfPumps + " fuel pump simulation");
+        System.out.println(noOfGasolinePumps + " gasoline pumps "+noOfDieselPumps+" diesel pumps simulation");
         System.out.println("Number of cars served = " + noOfServedCars);
         System.out.println("Number of cars that left = "+ noOfCarsLeft);
         System.out.println("Number of diesel cars = "+noOfDieselCars);
@@ -43,14 +43,18 @@ public class GasStationSimulation extends Process {
     }
 
     class Car extends Process {
-        private double fuelLevel;
-        private String fuelType; // Benzín nebo nafta
+        private double fuelLevel; // Množství paliva v procentech
+        private FuelType fuelType; // Benzín nebo nafta
 
-        public Car(String fuelType){
-            Random rand = new Random();
-            this.fuelLevel = Math.max(0, Math.min(rand.nextGaussian() * 10 + 30, 100));
-            this.fuelType = fuelType; // Nastavení typu paliva pro auto
-            if(this.fuelType.equals("gasoline")){
+        // Konstruktor inicializuje auto s určitým typem paliva a náhodně generovaným množstvím paliva
+        public Car(FuelType fuelType){
+            double mean = 30;
+            double std = 10;
+            // Generování množství paliva s normálním rozdělením a omezení hodnot mezi 0 a 100
+            double fuelLevel = random.nextGaussian() *std + mean;
+            this.fuelLevel = Math.max(0, Math.min(fuelLevel, 100)); //omezení kvůli předpokladu množství paliva v procentech
+            this.fuelType = fuelType;
+            if(this.fuelType.equals(FuelType.GASOLINE)){
                 noOfGasolineCars+=1;
             }
             else{
@@ -62,14 +66,14 @@ public class GasStationSimulation extends Process {
         }
         public void actions() {
             double arrivalTime = time();
-            Head waitingLine = this.fuelType.equals("gasoline") ? waitingGasolineCars : waitingDieselCars;
-            if (waitingLine.cardinal() + currentCarsOnStation < maxCapacity) {
-                into(waitingLine);
+            Head waitingLine = this.fuelType.equals(FuelType.GASOLINE) ? waitingGasolineCars : waitingDieselCars; //rozdělení do správné fronty
+            if (waitingLine.cardinal() + currentCarsOnStation < maxCapacity) { //kontrola kapacity
+                into(waitingLine); //přidání aut do příslušné fronty
                 currentCarsOnStation++;
                 if (maxQueueLength < waitingLine.cardinal()) maxQueueLength = waitingLine.cardinal();
-                Head pumpLine = this.fuelType.equals("gasoline") ? gasolinePumps : dieselPumps;
+                Head pumpLine = this.fuelType.equals(FuelType.GASOLINE) ? gasolinePumps : dieselPumps; //rozdělení ke správné pumpě
                 if (!pumpLine.empty()) activate((FuelPump) pumpLine.first());
-                passivate();
+                passivate(); //auto čeká na obsluhu
                 currentCarsOnStation--;
                 noOfServedCars++;
                 totalServiceTime += time() - arrivalTime;
@@ -80,28 +84,33 @@ public class GasStationSimulation extends Process {
     }
 
     class FuelPump extends Process {
-        private String fuelType; // Benzín nebo nafta
+        // Atribut fuelType určuje typ paliva, které pumpa poskytuje - buď GASOLINE (benzín) nebo DIESEL (nafta)
+        private FuelType fuelType;
 
-        public FuelPump(String fuelType) {
+        // Konstruktor FuelPump inicializuje pumpu s určitým typem paliva
+        public FuelPump(FuelType fuelType) {
             this.fuelType = fuelType;
         }
 
         public void actions() {
             while (true) {
-                out();
-                Head waitingLine = this.fuelType.equals("gasoline") ? waitingGasolineCars : waitingDieselCars;
+                out();  // Vyjmout pumpu z fronty procesů, aby se mohla znovu aktivovat, když bude potřeba
+                Head waitingLine = this.fuelType.equals(FuelType.GASOLINE) ? waitingGasolineCars : waitingDieselCars;   // Rozhodnutí, která fronta aut bude obsluhována na základě typu paliva pumpy
+                // Dokud ve frontě čekají auta, pumpa je postupně obsluhuje.
                 while (!waitingLine.empty()) {
                     Car car = (Car) waitingLine.first();
-                    car.out();
+                    car.out(); //odstranění auta z fronty čekající na natankování
                     double fuelNeeded = 100 - car.getCarFuelLevel();
                     double refuelingTime = calculateRefuelingTime(fuelNeeded);
-                    hold(refuelingTime);
+                    hold(refuelingTime); //simulace doby tankování
                     activate(car);
                 }
-                wait(this.fuelType.equals("gasoline") ? gasolinePumps : dieselPumps);
+                // Po obsloužení všech aut ve frontě pumpa čeká na další vozidla.
+                wait(this.fuelType.equals(FuelType.GASOLINE) ? gasolinePumps : dieselPumps);
             }
         }
-
+       // Metoda pro výpočet doby tankování - předpoklad, že existuje přímá závislost mezi chybějícím palivem a dobou tankování
+        // předpokladem je, že natankování 100% nádrže trvá 10 minut
         private double calculateRefuelingTime(double fuelNeeded) {
             return fuelNeeded / 10;
         }
@@ -110,9 +119,9 @@ public class GasStationSimulation extends Process {
     class CarGenerator extends Process {
         public void actions() {
             while (time() <= simPeriod) {
-                String fuelType = random.nextBoolean() ? "gasoline" : "diesel";
+                FuelType fuelType = random.nextBoolean() ? FuelType.GASOLINE : FuelType.DIESEL;
                 activate(new Car(fuelType));
-                hold(random.negexp(1 / 15.0));
+                hold(random.negexp(1 / 5.0));
             }
         }
     }
@@ -120,5 +129,8 @@ public class GasStationSimulation extends Process {
         activate(new GasStationSimulation(1,1));
         activate(new GasStationSimulation(2,2));
         activate(new GasStationSimulation(4,4));
+    }
+    enum FuelType{
+        GASOLINE, DIESEL
     } 
 }
