@@ -8,7 +8,8 @@ public class GasStationSimulation extends Process {
     Head waitingCars = new Head();
     Random random = new Random(5);
     double totalServiceTime;
-    int noOfServedCars, maxQueueLength;
+    int noOfServedCars, maxQueueLength,noOfCarsLeft, currentCarsOnStation = 0;
+    int maxCapacity = 5; //celková maximální kapacita aut na stanici
     long startTime = System.currentTimeMillis();
 
     GasStationSimulation(int n) { noOfPumps = n; }
@@ -24,6 +25,7 @@ public class GasStationSimulation extends Process {
     void report() {
         System.out.println(noOfPumps + " fuel pump simulation");
         System.out.println("Number of cars served = " + noOfServedCars);
+        System.out.println("Number of cars that left = "+ noOfCarsLeft);
         java.text.NumberFormat fmt = java.text.NumberFormat.getNumberInstance();
         fmt.setMaximumFractionDigits(2);
         System.out.println("Average service time = " + fmt.format(totalServiceTime / noOfServedCars));
@@ -46,15 +48,20 @@ public class GasStationSimulation extends Process {
         };
         public void actions() {
             double arrivalTime = time();
-            into(waitingCars);
-            int queueLength = waitingCars.cardinal();
-            if (maxQueueLength < queueLength)
-                maxQueueLength = queueLength;
-            if (!availablePumps.empty())
-                activate((FuelPump) availablePumps.first());
-            passivate();
-            noOfServedCars++;
-            totalServiceTime += time() - arrivalTime;
+            // kontrola, zda kapacita fronty a počet dostupných pump nedosáhl maximální kapacity
+            if (waitingCars.cardinal() < maxCapacity) {
+                into(waitingCars);
+                currentCarsOnStation++;
+                if (maxQueueLength < waitingCars.cardinal()) maxQueueLength = waitingCars.cardinal();
+                if (!availablePumps.empty()) activate((FuelPump) availablePumps.first());
+                passivate();
+                currentCarsOnStation--;
+                noOfServedCars++;
+                totalServiceTime += time() - arrivalTime;
+            } else {
+                // Auto odjíždí, protože kapacita byla překročena
+                noOfCarsLeft++;
+            }
         }
     }
 
@@ -85,7 +92,7 @@ public class GasStationSimulation extends Process {
         public void actions() {
             while (time() <= simPeriod) {
                 activate(new Car());
-                hold(random.negexp(1 / 10.0));
+                hold(random.negexp(1 / 5.0));
             }
         }
     }
