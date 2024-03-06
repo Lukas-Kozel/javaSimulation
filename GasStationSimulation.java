@@ -103,65 +103,67 @@ public class GasStationSimulation extends Process {
                 this.inUseBy = car; // Assign the car to the pump
             }
         
+                        // In the FuelPump class
             public void actions() {
                 while (true) {
-                    if (inUseBy != null) { // Checks if the pump is currently in use by a car
+                    if (inUseBy != null) {
                         double fuelNeeded = 100 - inUseBy.fuelLevel;
                         double refuelingTime = calculateRefuelingTime(fuelNeeded);
-                        hold(refuelingTime); // Simulate the time taken for refueling
-        
-                        // Move the car to the payment queue
+                        hold(refuelingTime); // Simulate refueling
+
                         inUseBy.into(waitingForPaymentCars);
-                        if (!cashiers.empty()) {
-                            activate((Cashier) cashiers.first());
+                        // Activate all cashiers; they will check if there are cars to process
+                        for (Link l = cashiers.first(); l != null; l = l.suc()) {
+                            Cashier cashier = (Cashier) l;
+                            if (!cashier.isBusy) {
+                                activate(cashier); // Activate only this cashier
+                                break; // Exit after finding the first available cashier
+                            }
                         }
-        
-                        // The pump waits in passivate state until the payment is processed
-                        // The cashier will reactivate this pump to process another car after payment is done
-                        passivate(); 
+                        passivate();
                     } else {
-                        // If not in use, the pump waits for a car to be assigned
                         passivate();
                     }
                 }
             }
+
         
             private double calculateRefuelingTime(double fuelNeeded) {
-                return fuelNeeded / 100; // Simulates the refueling time based on the amount of fuel needed
+                return fuelNeeded / 10; // Simulates the refueling time based on the amount of fuel needed
             }
         }
         
     
         // Cashier class modifications to handle payment and unlock the fuel pump after payment
         class Cashier extends Process {
+            boolean isBusy = false; // Flag to track if the cashier is currently busy
             public void actions() {
                 while (true) {
-                    if (!waitingForPaymentCars.empty()) {
-                        
+                    if (!waitingForPaymentCars.empty() && !isBusy) {
+                        this.isBusy = true;
                         Car car = (Car) waitingForPaymentCars.first();
                         car.out(); // Remove the car from the payment queue
                         hold(calculatePaymentTime()); // Simulate payment time
-                        System.out.println("waited: "+calculatePaymentTime());
                         car.assignedPump.setInUse(null); // Unlock the fuel pump
                         activate(car); // Reactivate the car to proceed with leaving the station
                         payed++;
+                        this.isBusy = false;
+                    } else {
+                        passivate(); // Wait for another car to arrive for payment
                     }
-                    else{
-                    passivate(); // Wait for another car to arrive for payment
-                }
                 }
             }
-        }
         private double calculatePaymentTime() {
-            return 20;//random.negexp(1 / 10.0);
+            return random.negexp(1 / 10.0);
         
     }
+}
 
     class CarGenerator extends Process {
         public void actions() {
             while (time() <= simPeriod) {
                 activate(new Car());
-                hold(random.negexp(1 / 5.0)); // Generate new cars at a random time
+                hold(random.negexp(1 / 2.0)); // Generate new cars at a random time
             }
         }
     }
@@ -169,6 +171,6 @@ public class GasStationSimulation extends Process {
     public static void main(String args[]) {
         activate(new GasStationSimulation(2,2));
         activate(new GasStationSimulation(3,2));
-        activate(new GasStationSimulation(2,3));
+        activate(new GasStationSimulation(2,5));
     }
 }
