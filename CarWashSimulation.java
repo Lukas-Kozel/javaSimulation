@@ -78,5 +78,7 @@ public class CarWashSimulation extends Process {
     public static void main(String args[]) {
         activate(new CarWashSimulation(1));
         activate(new CarWashSimulation(2));
+        activate(new CarWashSimulation(3));
+        activate(new CarWashSimulation(4));
     } 
 }
